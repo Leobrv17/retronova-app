@@ -28,24 +28,26 @@ class AuthService {
         email: email,
         password: password,
       );
+      await result.user?.updateDisplayName(pseudo);
+      await result.user?.reload();
 
-      // 2. Mettre à jour le displayName APRÈS création de l'utilisateur
-      if (result.user != null) {
-        try {
-          // Solution #1: Méthode directe (peut échouer sur certaines versions)
-          await _updateUserDisplayName(result.user!, pseudo);
-
-          // Solution de secours si la première méthode échoue
-          if (result.user!.displayName == null ||
-              result.user!.displayName!.isEmpty) {
-            await _fallbackUpdateDisplayName(result.user!, pseudo);
-          }
-        } catch (e) {
-          print('Erreur lors de la mise à jour du displayName: $e');
-          // Tenter une méthode alternative si la première échoue
-          await _fallbackUpdateDisplayName(result.user!, pseudo);
-        }
-      }
+      // // 2. Mettre à jour le displayName APRÈS création de l'utilisateur
+      // if (result.user != null) {
+      //   try {
+      //     // Solution #1: Méthode directe (peut échouer sur certaines versions)
+      //     await _updateUserDisplayName(result.user!, pseudo);
+      //
+      //     // Solution de secours si la première méthode échoue
+      //     if (result.user!.displayName == null ||
+      //         result.user!.displayName!.isEmpty) {
+      //       await _fallbackUpdateDisplayName(result.user!, pseudo);
+      //     }
+      //   } catch (e) {
+      //     print('Erreur lors de la mise à jour du displayName: $e');
+      //     // Tenter une méthode alternative si la première échoue
+      //     await _fallbackUpdateDisplayName(result.user!, pseudo);
+      //   }
+      // }
 
       return result;
     } catch (e) {
