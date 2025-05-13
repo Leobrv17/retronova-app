@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "681290201959",
+    "project_id": "retronova-df56b",
+    "storage_bucket": "retronova-df56b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:681290201959:android:ccbe8d915e22541cc98dc2",
+        "android_client_info": {
+          "package_name": "com.example.retronova_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC21pJjrTBCqaAorwZ-_sahssRyrZbd5CU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
