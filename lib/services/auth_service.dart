@@ -35,7 +35,7 @@ class AuthService {
 
       final String firebaseId = result.user?.uid ?? '';
 
-      final apiService = ApiService(baseUrl: 'http://10.31.38.184:8000');
+      final apiService = ApiService();
 
       final newUser = UserModel(
         firstName: nom,

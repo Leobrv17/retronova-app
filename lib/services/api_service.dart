@@ -4,9 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class ApiService {
-  final String baseUrl;
-
-  ApiService({required this.baseUrl});
+  static const String _baseUrl = 'http://10.31.38.184:8000';
 
   Map<String, String> get headers => {
     'Content-Type': 'application/json',
@@ -16,7 +14,7 @@ class ApiService {
   Future<UserModel?> createUser(UserModel user) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/users/'),
+        Uri.parse('$_baseUrl/users/'),
         headers: headers,
         body: jsonEncode(user.toApiJson()),
       );
