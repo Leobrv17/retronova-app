@@ -26,6 +26,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
     // Initialize the friend provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      print("Friends Screen initialized - loading friend data");
       Provider.of<FriendProvider>(context, listen: false).initialize();
     });
   }
@@ -238,7 +239,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           backgroundColor: Colors.orange.shade200,
           child: Text(request.friendFromId.substring(0, 1).toUpperCase()),
         ),
-        title: Text('Request from ${request.friendFromId}'),
+        title: Text('Request from: ${request.friendFromId.substring(0, 8)}...'),
         subtitle: const Text('Wants to be your friend'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -267,7 +268,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           backgroundColor: Colors.blue.shade200,
           child: Text(request.friendToId.substring(0, 1).toUpperCase()),
         ),
-        title: Text('Request to ${request.friendToId}'),
+        title: Text('Request to: ${request.friendToId.substring(0, 8)}...'),
         subtitle: const Text('Pending acceptance'),
         trailing: IconButton(
           icon: const Icon(Icons.cancel, color: Colors.grey),

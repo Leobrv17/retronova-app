@@ -18,7 +18,16 @@ class FriendService {
     try {
       final user = firebase_auth.FirebaseAuth.instance.currentUser;
       if (user != null) {
-        return await user.getIdToken();
+        print('Getting auth token for user: ${user.uid}');
+        final token = await user.getIdToken();
+        if (token != null && token.isNotEmpty) {
+          print('Successfully obtained token');
+          return token;
+        } else {
+          print('Empty token received from Firebase');
+        }
+      } else {
+        print('No authenticated user found for token request');
       }
       return null;
     } catch (e) {
@@ -30,6 +39,7 @@ class FriendService {
   // Headers with auth token
   Future<Map<String, String>> _getHeaders() async {
     final token = await _getAuthToken();
+    print('Auth token for API request: ${token != null ? 'Found (${token.substring(0, 10)}...)' : 'Not found'}');
     return {
       'Content-Type': 'application/json',
       'Authorization': token != null ? 'Bearer $token' : '',
@@ -40,17 +50,39 @@ class FriendService {
   Future<List<Friend>> getAllFriends() async {
     try {
       final headers = await _getHeaders();
+      print('Getting all friendships from: $baseUrl');
       final response = await _client.get(Uri.parse(baseUrl), headers: headers);
 
+      print('Friends API response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
+        print('Friends API response body: ${response.body}');
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => Friend.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load friends: ${response.statusCode}');
+      } else if (response.statusCode == 307 || response.statusCode == 302 || response.statusCode == 301) {
+        // Handle redirects manually
+        final redirectUrl = response.headers['location'];
+        print('Redirecting to: $redirectUrl');
+
+        if (redirectUrl != null) {
+          final redirectResponse = await _client.get(
+            Uri.parse(redirectUrl),
+            headers: headers,
+          );
+
+          if (redirectResponse.statusCode == 200) {
+            final List<dynamic> data = json.decode(redirectResponse.body);
+            return data.map((json) => Friend.fromJson(json)).toList();
+          }
+        }
       }
+
+      print('Failed to load friends: ${response.statusCode}, ${response.body}');
+      return [];
     } catch (e) {
       print('Error fetching friends: $e');
-      rethrow;
+      // Return empty list instead of throwing to prevent app crashes
+      return [];
     }
   }
 

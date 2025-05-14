@@ -1,6 +1,5 @@
 // lib/models/friend_model.dart
 import 'dart:convert';
-import 'package:uuid/uuid.dart';
 
 class Friend {
   final String id;
@@ -21,6 +20,7 @@ class Friend {
 
   // Convert from JSON object
   factory Friend.fromJson(Map<String, dynamic> json) {
+    print('Parsing friend from JSON: $json');
     return Friend(
       id: json['id'],
       friendFromId: json['friend_from_id'],

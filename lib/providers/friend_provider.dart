@@ -9,7 +9,8 @@ class FriendProvider with ChangeNotifier {
   final FriendService _friendService = FriendService();
 
   // User info
-  String? _currentUserId;
+  String? _currentUserId; // Firebase ID
+  String? _currentUserSystemId; // System UUID
 
   // Friends lists
   List<Friend> _incomingRequests = [];
@@ -34,24 +35,74 @@ class FriendProvider with ChangeNotifier {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
       _currentUserId = currentUser.uid;
+      print("FriendProvider initialized with Firebase user ID: $_currentUserId");
+
+      // Get the system UUID for the current user
+      try {
+        final userModel = await _friendService.findUserByFirebaseId(_currentUserId!);
+        if (userModel != null) {
+          _currentUserSystemId = userModel.id.toString();
+          print("Found system UUID for current user: $_currentUserSystemId");
+        } else {
+          print("Could not find system UUID for user with Firebase ID: $_currentUserId");
+        }
+      } catch (e) {
+        print("Error finding system UUID for current user: $e");
+      }
+
       await loadAllFriendData();
+    } else {
+      print("FriendProvider could not initialize - no current user");
     }
   }
 
   // Load all friend data
   Future<void> loadAllFriendData() async {
-    if (_currentUserId == null) return;
+    if (_currentUserId == null || _currentUserSystemId == null) {
+      print("Cannot load friend data - missing user IDs. Firebase ID: $_currentUserId, System ID: $_currentUserSystemId");
+      return;
+    }
 
     _setLoading(true);
     _clearError();
 
     try {
-      _incomingRequests = await _friendService.getIncomingFriendRequests(_currentUserId!);
-      _outgoingRequests = await _friendService.getOutgoingFriendRequests(_currentUserId!);
-      _confirmedFriends = await _friendService.getConfirmedFriends(_currentUserId!);
+      print("Loading all friend data for user $_currentUserId (System ID: $_currentUserSystemId)");
+
+      // Get all friendships
+      final allFriends = await _friendService.getAllFriends();
+      print("Found ${allFriends.length} total friendships");
+
+      // Filter friendships using the system UUID
+      _incomingRequests = allFriends.where((friend) =>
+      friend.friendToId == _currentUserSystemId &&
+          !friend.accept &&
+          !friend.decline &&
+          !friend.delete
+      ).toList();
+
+      _outgoingRequests = allFriends.where((friend) =>
+      friend.friendFromId == _currentUserSystemId &&
+          !friend.accept &&
+          !friend.decline &&
+          !friend.delete
+      ).toList();
+
+      _confirmedFriends = allFriends.where((friend) =>
+      (friend.friendFromId == _currentUserSystemId || friend.friendToId == _currentUserSystemId) &&
+          friend.accept &&
+          !friend.decline &&
+          !friend.delete
+      ).toList();
+
+      print("Incoming requests: ${_incomingRequests.length}");
+      print("Outgoing requests: ${_outgoingRequests.length}");
+      print("Confirmed friends: ${_confirmedFriends.length}");
+
       _setLoading(false);
       notifyListeners();
     } catch (e) {
+      print("Error loading friend data: $e");
       _setError('Failed to load friends: $e');
     }
   }
