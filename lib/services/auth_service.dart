@@ -1,5 +1,7 @@
 // services/auth_service.dart (version corrigée avec updateDisplayName)
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:retronova_app/models/user_model.dart';
+import 'package:retronova_app/services/api_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -31,23 +33,25 @@ class AuthService {
       await result.user?.updateDisplayName(pseudo);
       await result.user?.reload();
 
-      // // 2. Mettre à jour le displayName APRÈS création de l'utilisateur
-      // if (result.user != null) {
-      //   try {
-      //     // Solution #1: Méthode directe (peut échouer sur certaines versions)
-      //     await _updateUserDisplayName(result.user!, pseudo);
-      //
-      //     // Solution de secours si la première méthode échoue
-      //     if (result.user!.displayName == null ||
-      //         result.user!.displayName!.isEmpty) {
-      //       await _fallbackUpdateDisplayName(result.user!, pseudo);
-      //     }
-      //   } catch (e) {
-      //     print('Erreur lors de la mise à jour du displayName: $e');
-      //     // Tenter une méthode alternative si la première échoue
-      //     await _fallbackUpdateDisplayName(result.user!, pseudo);
-      //   }
-      // }
+      final String firebaseId = result.user?.uid ?? '';
+
+      final apiService = ApiService(baseUrl: 'http://10.31.38.184:8000');
+
+      final newUser = UserModel(
+        firstName: nom,
+        lastName: prenom,
+        nbTicket: 0,
+        bar: false,
+        firebaseId: firebaseId,
+      );
+
+      final createdUser = await apiService.createUser(newUser);
+
+      if (createdUser != null) {
+        print('Utilisateur créé avec ID: ${createdUser.id}');
+      } else {
+        print('Erreur lors de la création.');
+      }
 
       return result;
     } catch (e) {
