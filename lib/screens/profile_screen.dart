@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../services/user_service.dart';
+import '../models/user_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -12,26 +14,34 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool isLoading = false;
+  bool isLoading = true;
   bool isEditing = false;
   final _formKey = GlobalKey<FormState>();
   final _pseudoController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   String? _cachedDisplayName;
+  UserModel? _userProfile;
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
-    // Charger initialement le displayName
+    // Charger initialement les données utilisateur
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserData();
     });
   }
 
   Future<void> _loadUserData() async {
+    setState(() {
+      isLoading = true;
+    });
+
     final user = Provider.of<User?>(context, listen: false);
     if (user != null) {
-      // Forcer un rechargement de l'utilisateur pour obtenir les données les plus récentes
       try {
+        // Forcer un rechargement de l'utilisateur pour obtenir les données les plus récentes
         await user.reload();
         final refreshedUser = FirebaseAuth.instance.currentUser;
 
@@ -39,16 +49,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _cachedDisplayName = refreshedUser?.displayName;
         });
 
-        print('Données utilisateur chargées: displayName = $_cachedDisplayName');
+        print('Tentative de récupération des données utilisateur avec Firebase ID: ${user.uid}');
+        // Récupérer les détails supplémentaires de l'API
+        final userProfile = await _apiService.getUserByFirebaseId(user.uid);
+        if (userProfile != null) {
+          setState(() {
+            _userProfile = userProfile;
+            _firstNameController.text = userProfile.firstName;
+            _lastNameController.text = userProfile.lastName;
+          });
+          print('Données utilisateur chargées: prénom=${userProfile.firstName}, nom=${userProfile.lastName}, publiqueId=${userProfile.publiqueId}');
+        } else {
+          print('Profil utilisateur non trouvé dans l\'API');
+        }
       } catch (e) {
-        print('Erreur lors du rechargement de l\'utilisateur: $e');
+        print('Erreur lors du chargement des données utilisateur: $e');
+      } finally {
+        setState(() {
+          isLoading = false;
+        });
       }
+    } else {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
   @override
   void dispose() {
     _pseudoController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     super.dispose();
   }
 
@@ -118,42 +150,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Debug info (peut être supprimé en production)
-        Container(
-          padding: const EdgeInsets.all(8),
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(8),
+        // Section d'information utilisateur
+        Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('User ID: ${user.uid}'),
-              Text('Auth DisplayName: ${user.displayName}'),
-              Text('Cached DisplayName: $_cachedDisplayName'),
-              Text('Email: ${user.email}'),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                // Avatar
+                CircleAvatar(
+                  radius: 60,
+                  backgroundColor: Colors.blue,
+                  child: Text(
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                    style: const TextStyle(fontSize: 50, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Nom d'utilisateur
+                Text(
+                  displayName,
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+
+                // Email
+                Text(
+                  user.email ?? 'Pas d\'email',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+
+                // ID Public
+                if (_userProfile?.publiqueId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.perm_identity, size: 16, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'ID Public: ${_userProfile!.publiqueId}',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
 
-        // Avatar et informations de base
-        CircleAvatar(
-          radius: 50,
-          backgroundColor: Colors.blue,
-          child: Text(
-            displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
-            style: const TextStyle(fontSize: 40, color: Colors.white),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          displayName,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        Text(user.email ?? 'Pas d\'email'),
-
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
 
         // Statistiques
         Row(
@@ -161,23 +212,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             _buildStatItem('Parties', '0'),
             _buildStatItem('Victoires', '0'),
-            _buildStatItem('Niveau', '1'),
+            _buildStatItem('Tickets', _userProfile?.nbTicket.toString() ?? '0'),
           ],
         ),
 
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
 
         // Informations personnelles
         _buildProfileSection(
           title: 'Informations personnelles',
           children: [
             _buildInfoRow(Icons.person, 'Pseudo', displayName),
+            if (_userProfile != null) ...[
+              _buildInfoRow(Icons.person_outline, 'Prénom', _userProfile!.firstName),
+              _buildInfoRow(Icons.person_outline, 'Nom', _userProfile!.lastName),
+            ],
             _buildInfoRow(Icons.email, 'Email', user.email ?? 'Pas d\'email'),
-            _buildInfoRow(
-                Icons.calendar_today,
-                'Date d\'inscription',
-                'Mai 2025'
-            ),
           ],
         ),
 
@@ -251,6 +301,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
               return null;
             },
           ),
+          const SizedBox(height: 16),
+
+          // Champ Prénom
+          TextFormField(
+            controller: _firstNameController,
+            decoration: const InputDecoration(
+              labelText: 'Prénom',
+              hintText: 'Entrez votre prénom',
+              prefixIcon: Icon(Icons.person_outline),
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Champ Nom
+          TextFormField(
+            controller: _lastNameController,
+            decoration: const InputDecoration(
+              labelText: 'Nom',
+              hintText: 'Entrez votre nom',
+              prefixIcon: Icon(Icons.person_outline),
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 32),
 
           // Boutons d'action
@@ -262,6 +336,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   setState(() {
                     isEditing = false;
                     _pseudoController.text = '';
+                    _firstNameController.text = _userProfile?.firstName ?? '';
+                    _lastNameController.text = _userProfile?.lastName ?? '';
                   });
                 },
                 style: OutlinedButton.styleFrom(
@@ -287,14 +363,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final newPseudo = _pseudoController.text.trim();
+    final newFirstName = _firstNameController.text.trim();
+    final newLastName = _lastNameController.text.trim();
 
     setState(() => isLoading = true);
 
     try {
-      // Utiliser le service d'authentification
+      // Mettre à jour Firebase Auth (seulement le displayName)
       await Provider.of<AuthService>(context, listen: false).updateUserProfile(
         pseudo: newPseudo,
       );
+
+      // Mettre à jour l'API si nécessaire
+      if (_userProfile != null) {
+        final updatedUser = UserModel(
+          firstName: newFirstName,
+          lastName: newLastName,
+          nbTicket: _userProfile!.nbTicket,
+          bar: _userProfile!.bar,
+          firebaseId: _userProfile!.firebaseId,
+          id: _userProfile!.id,
+          publiqueId: _userProfile!.publiqueId,
+        );
+
+        print('Tentative de mise à jour du profil API avec ID: ${_userProfile!.id}');
+        final result = await _apiService.updateUser(updatedUser);
+
+        if (result != null) {
+          print('Profil API mis à jour avec succès');
+        } else {
+          print('Échec de la mise à jour du profil API');
+        }
+      }
 
       // Mettre à jour le cache local
       setState(() {

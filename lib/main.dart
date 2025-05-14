@@ -1,4 +1,4 @@
-// main.dart avec Score Board ajouté
+// Now let's update the main.dart file to include our friends functionality
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,10 +8,13 @@ import 'screens/arcade_screen.dart';
 import 'screens/shop_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/scoreboard_screen.dart'; // Nouvel import
+import 'screens/scoreboard_screen.dart';
+import 'screens/friends_screen.dart'; // New import
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'services/auth_service.dart';
+import 'providers/friend_provider.dart'; // New import
+import 'widgets/friend_request_badge.dart'; // New import
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +36,9 @@ class MyApp extends StatelessWidget {
           create: (context) => context.read<AuthService>().user,
           initialData: null,
         ),
+        ChangeNotifierProvider(
+          create: (_) => FriendProvider(), // Add the FriendProvider
+        ),
       ],
       child: MaterialApp(
         title: 'Application avec Navbar',
@@ -47,13 +53,14 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),
           '/home': (context) => const HomeScreen(),
+          '/friends': (context) => const FriendsScreen(), // Add FriendsScreen route
         },
       ),
     );
   }
 }
 
-// Wrapper pour rediriger vers l'écran approprié selon l'état d'authentification
+// Wrapper for navigation based on authentication state
 class Wrapper extends StatelessWidget {
   const Wrapper({Key? key}) : super(key: key);
 
@@ -61,7 +68,7 @@ class Wrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = Provider.of<User?>(context);
 
-    // Si l'utilisateur est connecté, afficher HomeScreen, sinon LoginScreen
+    // If user is authenticated, show HomeScreen, otherwise show LoginScreen
     if (user != null) {
       return const HomeScreen();
     } else {
@@ -80,11 +87,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
+  // Updated screens list with FriendsScreen
   static final List<Widget> _screens = [
     const ArcadeScreen(),
     const ShopScreen(),
     const SearchScreen(),
-    const ScoreboardScreen(), // Nouvelle section
+    const ScoreboardScreen(),
+    const FriendsScreen(), // New FriendsScreen
     const ProfileScreen(),
   ];
 
@@ -96,30 +105,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Initialize FriendProvider when the home screen is loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<FriendProvider>(context, listen: false).initialize();
+    });
+
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed, // Important pour plus de 3 items
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
+        type: BottomNavigationBarType.fixed, // Important for more than 3 items
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
             icon: Icon(Icons.sports_esports),
             label: 'Arcade',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag),
             label: 'Shop',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.search),
-            label: 'Recherche',
+            label: 'Search',
           ),
-          BottomNavigationBarItem( // Nouvel item
+          const BottomNavigationBarItem(
             icon: Icon(Icons.leaderboard),
             label: 'Scores',
           ),
+          // Friend item with badge for pending requests
           BottomNavigationBarItem(
+            icon: FriendRequestBadge(
+              child: const Icon(Icons.people),
+            ),
+            label: 'Friends',
+          ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person),
-            label: 'Profil',
+            label: 'Profile',
           ),
         ],
         currentIndex: _selectedIndex,

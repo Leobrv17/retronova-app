@@ -1,7 +1,7 @@
 // services/auth_service.dart (version corrigée avec updateDisplayName)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:retronova_app/models/user_model.dart';
-import 'package:retronova_app/services/api_service.dart';
+import 'package:retronova_app/services/user_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
