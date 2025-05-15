@@ -41,7 +41,7 @@ class FriendRequestBadge extends StatelessWidget {
                   minHeight: 18,
                 ),
                 child: Text(
-                  '$pendingRequestsCount',
+                  pendingRequestsCount > 99 ? '99+' : '$pendingRequestsCount',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,

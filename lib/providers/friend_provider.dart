@@ -1,4 +1,4 @@
-// lib/providers/friend_provider.dart
+// lib/providers/friend_provider.dart - Version complète
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/friend_model.dart';
@@ -11,12 +11,12 @@ class FriendProvider with ChangeNotifier {
   // User info
   String? _currentUserId; // Firebase ID
   String? _currentUserSystemId; // System UUID
+  String? _currentUserPublicId; // Public ID
 
   // Friends lists
   List<Friend> _incomingRequests = [];
   List<Friend> _outgoingRequests = [];
   List<Friend> _confirmedFriends = [];
-  Map<String, UserModel> _userCache = {};
 
   // Loading states
   bool _isLoading = false;
@@ -28,7 +28,8 @@ class FriendProvider with ChangeNotifier {
   List<Friend> get incomingRequests => _incomingRequests;
   List<Friend> get outgoingRequests => _outgoingRequests;
   List<Friend> get confirmedFriends => _confirmedFriends;
-  Map<String, UserModel> get userCache => _userCache;
+  String? get currentUserSystemId => _currentUserSystemId;
+  String? get currentUserPublicId => _currentUserPublicId;
 
   // Initialize provider
   Future<void> initialize() async {
@@ -37,22 +38,35 @@ class FriendProvider with ChangeNotifier {
       _currentUserId = currentUser.uid;
       print("FriendProvider initialized with Firebase user ID: $_currentUserId");
 
-      // Get the system UUID for the current user
+      // Réinitialiser les états d'erreur
+      _clearError();
+      _setLoading(true);
+
       try {
+        // Get the system UUID for the current user
         final userModel = await _friendService.findUserByFirebaseId(_currentUserId!);
         if (userModel != null) {
-          _currentUserSystemId = userModel.id.toString();
+          _currentUserSystemId = userModel.id;
+          _currentUserPublicId = userModel.publiqueId;
           print("Found system UUID for current user: $_currentUserSystemId");
+          print("Found public ID for current user: $_currentUserPublicId");
+
+          // Une fois que nous avons l'identifiant système, charger les données d'amis
+          await loadAllFriendData();
         } else {
-          print("Could not find system UUID for user with Firebase ID: $_currentUserId");
+          print("Could not find system user with Firebase ID: $_currentUserId");
+          _setError("Utilisateur non trouvé dans le système. Veuillez vous déconnecter et vous reconnecter.");
         }
       } catch (e) {
-        print("Error finding system UUID for current user: $e");
+        print("Error during provider initialization: $e");
+        _setError('Erreur lors de l\'initialisation: $e');
+      } finally {
+        _setLoading(false);
       }
-
-      await loadAllFriendData();
     } else {
       print("FriendProvider could not initialize - no current user");
+      _setError("Aucun utilisateur connecté");
+      _setLoading(false);
     }
   }
 
@@ -60,6 +74,7 @@ class FriendProvider with ChangeNotifier {
   Future<void> loadAllFriendData() async {
     if (_currentUserId == null || _currentUserSystemId == null) {
       print("Cannot load friend data - missing user IDs. Firebase ID: $_currentUserId, System ID: $_currentUserSystemId");
+      _setError("Impossible de charger les données d'amis - utilisateur non identifié");
       return;
     }
 
@@ -67,7 +82,7 @@ class FriendProvider with ChangeNotifier {
     _clearError();
 
     try {
-      print("Loading all friend data for user $_currentUserId (System ID: $_currentUserSystemId)");
+      print("Loading all friend data for user ID: $_currentUserSystemId");
 
       // Get all friendships
       final allFriends = await _friendService.getAllFriends();
@@ -103,29 +118,24 @@ class FriendProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Error loading friend data: $e");
-      _setError('Failed to load friends: $e');
+      _setError('Erreur lors du chargement des amis: $e');
     }
   }
 
-  // Send friend request
-  Future<void> sendFriendRequest(String targetFirebaseId) async {
-    if (_currentUserId == null) return;
-
+  // Send friend request by public ID
+  Future<void> sendFriendRequestByPublicId(String targetPublicId) async {
     _setLoading(true);
     _clearError();
 
     try {
-      final request = FriendRequest(
-        userId: _currentUserId!,
-        targetUserId: targetFirebaseId,
-      );
-
-      final newFriend = await _friendService.createFriendRequest(request);
-      _outgoingRequests.add(newFriend);
+      final newFriend = await _friendService.createFriendRequestByPublicId(targetPublicId);
+      if (newFriend != null) {
+        _outgoingRequests.add(newFriend);
+      }
       _setLoading(false);
       notifyListeners();
     } catch (e) {
-      _setError('Failed to send friend request: $e');
+      _setError('Échec de l\'envoi de la demande d\'ami: $e');
     }
   }
 
@@ -135,18 +145,30 @@ class FriendProvider with ChangeNotifier {
     _clearError();
 
     try {
+      print('Provider: Attempting to accept friend request: $friendId');
       final updatedFriend = await _friendService.acceptFriendRequest(friendId);
 
-      // Remove from incoming requests
-      _incomingRequests.removeWhere((friend) => friend.id == friendId);
+      if (updatedFriend != null) {
+        print('Provider: Friend request accepted successfully');
 
-      // Add to confirmed friends
-      _confirmedFriends.add(updatedFriend);
+        // Remove from incoming requests
+        print('Provider: Removing request from incoming list');
+        _incomingRequests.removeWhere((friend) => friend.id == friendId);
 
-      _setLoading(false);
-      notifyListeners();
+        // Add to confirmed friends
+        print('Provider: Adding to confirmed friends list');
+        _confirmedFriends.add(updatedFriend);
+
+        print('Provider: Notifying listeners of changes');
+        _setLoading(false);
+        notifyListeners();
+      } else {
+        print('Provider: Friend request not found or could not be accepted');
+        _setError('Demande d\'ami introuvable ou ne peut pas être acceptée');
+      }
     } catch (e) {
-      _setError('Failed to accept friend request: $e');
+      print('Provider: Error accepting friend request: $e');
+      _setError('Échec de l\'acceptation de la demande d\'ami: $e');
     }
   }
 
@@ -156,15 +178,26 @@ class FriendProvider with ChangeNotifier {
     _clearError();
 
     try {
-      await _friendService.declineFriendRequest(friendId);
+      print('Provider: Attempting to decline friend request: $friendId');
+      final updatedFriend = await _friendService.declineFriendRequest(friendId);
 
-      // Remove from incoming requests
-      _incomingRequests.removeWhere((friend) => friend.id == friendId);
+      if (updatedFriend != null) {
+        print('Provider: Friend request declined successfully');
 
-      _setLoading(false);
-      notifyListeners();
+        // Remove from incoming requests
+        print('Provider: Removing request from incoming list');
+        _incomingRequests.removeWhere((friend) => friend.id == friendId);
+
+        print('Provider: Notifying listeners of changes');
+        _setLoading(false);
+        notifyListeners();
+      } else {
+        print('Provider: Friend request not found or could not be declined');
+        _setError('Demande d\'ami introuvable ou ne peut pas être refusée');
+      }
     } catch (e) {
-      _setError('Failed to decline friend request: $e');
+      print('Provider: Error declining friend request: $e');
+      _setError('Échec du refus de la demande d\'ami: $e');
     }
   }
 

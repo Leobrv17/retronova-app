@@ -1,4 +1,4 @@
-// lib/screens/friends_screen.dart
+// lib/screens/friends_screen.dart - Version complète et cohérente
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/friend_provider.dart';
@@ -26,7 +26,6 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
     // Initialize the friend provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print("Friends Screen initialized - loading friend data");
       Provider.of<FriendProvider>(context, listen: false).initialize();
     });
   }
@@ -73,13 +72,13 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Friends'),
+        title: const Text('Amis'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Friends'),
-            Tab(text: 'Requests'),
-            Tab(text: 'Add'),
+            Tab(text: 'Mes amis'),
+            Tab(text: 'Demandes'),
+            Tab(text: 'Ajouter'),
           ],
         ),
       ),
@@ -100,7 +99,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => friendProvider.loadAllFriendData(),
-                    child: const Text('Retry'),
+                    child: const Text('Réessayer'),
                   ),
                 ],
               ),
@@ -122,6 +121,8 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
   Widget _buildFriendsTab(FriendProvider friendProvider) {
     final confirmedFriends = friendProvider.confirmedFriends;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentSystemId = friendProvider.currentUserSystemId;
 
     if (confirmedFriends.isEmpty) {
       return Center(
@@ -131,7 +132,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
             const Icon(Icons.people_outline, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text(
-              'You don\'t have any friends yet',
+              'Vous n\'avez aucun ami pour le moment',
               style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
             const SizedBox(height: 16),
@@ -139,7 +140,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
               onPressed: () {
                 _tabController.animateTo(2); // Switch to Add Friends tab
               },
-              child: const Text('Add Friends'),
+              child: const Text('Ajouter des amis'),
             ),
           ],
         ),
@@ -152,27 +153,33 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
         itemCount: confirmedFriends.length,
         itemBuilder: (context, index) {
           final friend = confirmedFriends[index];
-          // Determine if the current user is friend_from or friend_to
-          final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-          final isCurrentUserSender = friend.friendFromId == currentUserId;
-          final friendUserId = isCurrentUserSender ? friend.friendToId : friend.friendFromId;
+          // Obtenir le nom d'affichage ou l'ID public de l'ami (pas l'UUID)
+          final friendDisplayName = friend.getOtherUserDisplayName(currentSystemId ?? '');
+
+          // Obtenir la première lettre pour l'avatar
+          final initial = friendDisplayName.isNotEmpty ? friendDisplayName[0].toUpperCase() : 'A';
 
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ListTile(
               leading: CircleAvatar(
                 backgroundColor: Colors.blue.shade200,
-                child: Text(friendUserId.substring(0, 1).toUpperCase()),
+                child: Text(initial),
               ),
-              title: Text('Friend $friendUserId'),
-              subtitle: Text('Since ${DateTime.now().toString().substring(0, 10)}'),
+              title: Text(friendDisplayName),
+              subtitle: Text(
+                  'Ami depuis ${DateTime.now().toString().substring(0, 10)}'
+              ),
               trailing: IconButton(
                 icon: const Icon(Icons.person_remove),
                 onPressed: () => _showRemoveFriendDialog(context, friend, friendProvider),
-                tooltip: 'Remove friend',
+                tooltip: 'Supprimer cet ami',
               ),
               onTap: () {
-                // View friend profile or start chat
+                // Afficher le profil de l'ami ou démarrer une conversation
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Voir le profil de $friendDisplayName'))
+                );
               },
             ),
           );
@@ -184,6 +191,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
   Widget _buildRequestsTab(FriendProvider friendProvider) {
     final incomingRequests = friendProvider.incomingRequests;
     final outgoingRequests = friendProvider.outgoingRequests;
+    final currentSystemId = friendProvider.currentUserSystemId;
 
     if (incomingRequests.isEmpty && outgoingRequests.isEmpty) {
       return Center(
@@ -193,7 +201,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
             const Icon(Icons.mail_outline, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text(
-              'No pending friend requests',
+              'Aucune demande d\'ami en attente',
               style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
           ],
@@ -209,50 +217,74 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
             const Padding(
               padding: EdgeInsets.all(16.0),
               child: Text(
-                'Incoming Requests',
+                'Demandes reçues',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            ...incomingRequests.map((request) => _buildIncomingRequestItem(request, friendProvider)),
+            ...incomingRequests.map((request) => _buildIncomingRequestItem(
+              request,
+              friendProvider,
+              currentSystemId ?? '',
+            )),
           ],
 
           if (outgoingRequests.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.all(16.0),
               child: Text(
-                'Outgoing Requests',
+                'Demandes envoyées',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            ...outgoingRequests.map((request) => _buildOutgoingRequestItem(request, friendProvider)),
+            ...outgoingRequests.map((request) => _buildOutgoingRequestItem(
+              request,
+              friendProvider,
+              currentSystemId ?? '',
+            )),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildIncomingRequestItem(Friend request, FriendProvider friendProvider) {
+  Widget _buildIncomingRequestItem(Friend request, FriendProvider friendProvider, String currentSystemId) {
+    // Obtenir le nom d'affichage ou l'ID public du demandeur
+    final senderName = request.friendFromName ?? request.friendFromPublicId ?? "Utilisateur";
+
+    // Obtenir la première lettre pour l'avatar
+    final initial = senderName.isNotEmpty ? senderName[0].toUpperCase() : 'A';
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Colors.orange.shade200,
-          child: Text(request.friendFromId.substring(0, 1).toUpperCase()),
+          child: Text(initial),
         ),
-        title: Text('Request from: ${request.friendFromId.substring(0, 8)}...'),
-        subtitle: const Text('Wants to be your friend'),
+        title: Text('Demande de: $senderName'),
+        subtitle: const Text('Veut être votre ami'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Bouton d'acceptation
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green),
-              onPressed: () => friendProvider.acceptFriendRequest(request.id),
-              tooltip: 'Accept',
+              onPressed: () {
+                print('Accepting friend request ID: ${request.id}');
+                // Implémentation originale
+                friendProvider.acceptFriendRequest(request.id);
+              },
+              tooltip: 'Accepter',
             ),
+            // Bouton de refus
             IconButton(
               icon: const Icon(Icons.close, color: Colors.red),
-              onPressed: () => friendProvider.declineFriendRequest(request.id),
-              tooltip: 'Decline',
+              onPressed: () {
+                print('Declining friend request ID: ${request.id}');
+                // Implémentation originale
+                friendProvider.declineFriendRequest(request.id);
+              },
+              tooltip: 'Refuser',
             ),
           ],
         ),
@@ -260,20 +292,26 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildOutgoingRequestItem(Friend request, FriendProvider friendProvider) {
+  Widget _buildOutgoingRequestItem(Friend request, FriendProvider friendProvider, String currentSystemId) {
+    // Obtenir le nom d'affichage ou l'ID public du destinataire
+    final recipientName = request.friendToName ?? request.friendToPublicId ?? "Utilisateur";
+
+    // Obtenir la première lettre pour l'avatar
+    final initial = recipientName.isNotEmpty ? recipientName[0].toUpperCase() : 'A';
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Colors.blue.shade200,
-          child: Text(request.friendToId.substring(0, 1).toUpperCase()),
+          child: Text(initial),
         ),
-        title: Text('Request to: ${request.friendToId.substring(0, 8)}...'),
-        subtitle: const Text('Pending acceptance'),
+        title: Text('Demande à: $recipientName'),
+        subtitle: const Text('En attente de confirmation'),
         trailing: IconButton(
           icon: const Icon(Icons.cancel, color: Colors.grey),
           onPressed: () => friendProvider.cancelFriendRequest(request.id),
-          tooltip: 'Cancel request',
+          tooltip: 'Annuler la demande',
         ),
       ),
     );
@@ -290,8 +328,8 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    labelText: 'Search users',
-                    hintText: 'Enter username or ID',
+                    labelText: 'Rechercher des utilisateurs',
+                    hintText: 'Entrez un nom ou un ID public',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -324,7 +362,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 15),
                 ),
-                child: const Text('Search'),
+                child: const Text('Rechercher'),
               ),
             ],
           ),
@@ -338,20 +376,28 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
               itemCount: _searchResults.length,
               itemBuilder: (context, index) {
                 final user = _searchResults[index];
-                // Get current user ID
-                final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-                // Skip rendering if this is the current user
-                if (user.firebaseId == currentUserId) {
-                  // If this is the last item and it's the current user, show a message if no other results
+                // Afficher le nom complet ou l'ID public
+                final displayName =
+                '${user.firstName ?? ''} ${user.lastName ?? ''}'.trim().isNotEmpty
+                    ? '${user.firstName ?? ''} ${user.lastName ?? ''}'.trim()
+                    : user.publiqueId ?? 'Utilisateur';
+
+                // Obtenir l'initiale pour l'avatar
+                final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+
+                // Ne pas afficher l'utilisateur actuel
+                final currentUser = FirebaseAuth.instance.currentUser;
+                if (user.firebaseId == currentUser?.uid) {
+                  // Si c'est le dernier élément et qu'il s'agit de l'utilisateur actuel
                   if (index == _searchResults.length - 1 && _searchResults.length == 1) {
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Text('No users found except yourself'),
+                        child: Text('Aucun utilisateur trouvé sauf vous-même'),
                       ),
                     );
                   }
-                  return const SizedBox.shrink(); // Don't show current user
+                  return const SizedBox.shrink(); // Ne pas afficher l'utilisateur actuel
                 }
 
                 return Card(
@@ -359,30 +405,38 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.green.shade200,
-                      child: Text(user.firstName?.substring(0, 1).toUpperCase() ?? 'U'),
+                      child: Text(initial),
                     ),
-                    title: Text('${user.firstName} ${user.lastName}'),
-                    subtitle: Text('ID: ${user.publiqueId}'),
+                    title: Text(displayName),
+                    subtitle: Text('ID: ${user.publiqueId ?? "Non défini"}'),
                     trailing: ElevatedButton(
                       onPressed: () async {
                         try {
-                          await friendProvider.sendFriendRequest(user.firebaseId);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Friend request sent to ${user.firstName}')),
-                          );
+                          // Envoyer une demande d'ami en utilisant l'ID public
+                          if (user.publiqueId != null) {
+                            await friendProvider.sendFriendRequestByPublicId(user.publiqueId!);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Demande d\'ami envoyée à $displayName')),
+                            );
+                          } else {
+                            throw Exception("L'ID public de cet utilisateur n'est pas défini");
+                          }
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Error: $e'),
+                              content: Text('Erreur: $e'),
                               backgroundColor: Colors.red,
                             ),
                           );
                         }
                       },
-                      child: const Text('Add Friend'),
+                      child: const Text('Ajouter'),
                     ),
                     onTap: () {
-                      // View user profile
+                      // Voir le profil de l'utilisateur
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Voir le profil de $displayName'))
+                      );
                     },
                   ),
                 );
@@ -392,7 +446,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
         else if (_searchController.text.isNotEmpty)
             const Expanded(
               child: Center(
-                child: Text('No users found'),
+                child: Text('Aucun utilisateur trouvé'),
               ),
             )
           else
@@ -408,22 +462,22 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Search for users to add them as friends',
+                      'Recherchez des utilisateurs pour les ajouter comme amis',
                       style: TextStyle(fontSize: 16, color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'You can search by username or public ID',
+                      'Vous pouvez rechercher par nom ou ID public',
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 8),
                     ElevatedButton(
                       onPressed: () {
-                        _searchController.text = ''; // Example search term
-                        _searchUsers();
+                        _searchController.text = ''; // Vider le champ
+                        _searchUsers(); // Rechercher tous les utilisateurs
                       },
-                      child: const Text('Show All Users'),
+                      child: const Text('Afficher tous les utilisateurs'),
                     ),
                   ],
                 ),
@@ -434,31 +488,29 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
   }
 
   void _showRemoveFriendDialog(BuildContext context, Friend friend, FriendProvider friendProvider) {
-    // Determine if the current user is friend_from or friend_to
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    final isCurrentUserSender = friend.friendFromId == currentUserId;
-    final friendUserId = isCurrentUserSender ? friend.friendToId : friend.friendFromId;
+    final currentSystemId = friendProvider.currentUserSystemId ?? '';
+    final friendName = friend.getOtherUserDisplayName(currentSystemId);
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Remove Friend'),
-          content: Text('Are you sure you want to remove $friendUserId from your friends list?'),
+          title: const Text('Supprimer un ami'),
+          content: Text('Êtes-vous sûr de vouloir supprimer $friendName de votre liste d\'amis ?'),
           actions: <Widget>[
             TextButton(
-              child: const Text('Cancel'),
+              child: const Text('Annuler'),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text('Remove'),
+              child: const Text('Supprimer'),
               onPressed: () {
                 friendProvider.removeFriend(friend.id);
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Friend removed')),
+                  SnackBar(content: Text('$friendName a été retiré de vos amis')),
                 );
               },
             ),
