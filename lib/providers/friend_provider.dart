@@ -1,4 +1,3 @@
-// lib/providers/friend_provider.dart - Version complète
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/friend_model.dart';
@@ -72,8 +71,8 @@ class FriendProvider with ChangeNotifier {
 
   // Load all friend data
   Future<void> loadAllFriendData() async {
-    if (_currentUserId == null || _currentUserSystemId == null) {
-      print("Cannot load friend data - missing user IDs. Firebase ID: $_currentUserId, System ID: $_currentUserSystemId");
+    if (_currentUserId == null) {
+      print("Cannot load friend data - missing Firebase user ID: $_currentUserId");
       _setError("Impossible de charger les données d'amis - utilisateur non identifié");
       return;
     }
@@ -82,33 +81,74 @@ class FriendProvider with ChangeNotifier {
     _clearError();
 
     try {
+      // Récupérer les dernières informations de l'utilisateur pour éviter les problèmes de cache
+      final userModel = await _friendService.findUserByFirebaseId(_currentUserId!);
+      if (userModel != null) {
+        _currentUserSystemId = userModel.id;
+        _currentUserPublicId = userModel.publiqueId;
+        print("Updated system UUID for current user: $_currentUserSystemId");
+        print("Updated public ID for current user: $_currentUserPublicId");
+      } else {
+        print("Could not find system user with Firebase ID: $_currentUserId");
+        _setError("Utilisateur non trouvé dans le système. Veuillez vous déconnecter et vous reconnecter.");
+        _setLoading(false);
+        return;
+      }
+
+      // Vérifier à nouveau que l'ID système est disponible
+      if (_currentUserSystemId == null) {
+        print("Cannot load friend data - missing system ID after refresh");
+        _setError("Impossible de charger les données d'amis - ID système manquant");
+        _setLoading(false);
+        return;
+      }
+
       print("Loading all friend data for user ID: $_currentUserSystemId");
 
       // Get all friendships
       final allFriends = await _friendService.getAllFriends();
       print("Found ${allFriends.length} total friendships");
 
+      // Debug: afficher toutes les amitiés pour vérification
+      for (var friend in allFriends) {
+        print("Friendship: ID=${friend.id}, From=${friend.friendFromId}, To=${friend.friendToId}, Accept=${friend.accept}, Decline=${friend.decline}, Delete=${friend.delete}");
+      }
+
       // Filter friendships using the system UUID
-      _incomingRequests = allFriends.where((friend) =>
-      friend.friendToId == _currentUserSystemId &&
-          !friend.accept &&
-          !friend.decline &&
-          !friend.delete
-      ).toList();
+      _incomingRequests = allFriends.where((friend) {
+        print("from : ${friend.friendFromId}, to ${friend.friendToId}, current ${_currentUserSystemId}");
+        bool isIncoming = friend.friendToId == _currentUserSystemId &&
+            !friend.accept &&
+            !friend.decline &&
+            !friend.delete;
+        if (isIncoming) {
+          print("Found incoming request: ${friend.id} from ${friend.friendFromId}");
+        }
+        return isIncoming;
+      }).toList();
 
-      _outgoingRequests = allFriends.where((friend) =>
-      friend.friendFromId == _currentUserSystemId &&
-          !friend.accept &&
-          !friend.decline &&
-          !friend.delete
-      ).toList();
+      _outgoingRequests = allFriends.where((friend) {
+        bool isOutgoing = friend.friendFromId == _currentUserSystemId &&
+            !friend.accept &&
+            !friend.decline &&
+            !friend.delete;
+        if (isOutgoing) {
+          print("Found outgoing request: ${friend.id} to ${friend.friendToId}");
+        }
+        return isOutgoing;
+      }).toList();
 
-      _confirmedFriends = allFriends.where((friend) =>
-      (friend.friendFromId == _currentUserSystemId || friend.friendToId == _currentUserSystemId) &&
-          friend.accept &&
-          !friend.decline &&
-          !friend.delete
-      ).toList();
+      _confirmedFriends = allFriends.where((friend) {
+        bool isConfirmed = (friend.friendFromId == _currentUserSystemId ||
+            friend.friendToId == _currentUserSystemId) &&
+            friend.accept &&
+            !friend.decline &&
+            !friend.delete;
+        if (isConfirmed) {
+          print("Found confirmed friend: ${friend.id}");
+        }
+        return isConfirmed;
+      }).toList();
 
       print("Incoming requests: ${_incomingRequests.length}");
       print("Outgoing requests: ${_outgoingRequests.length}");
@@ -119,23 +159,8 @@ class FriendProvider with ChangeNotifier {
     } catch (e) {
       print("Error loading friend data: $e");
       _setError('Erreur lors du chargement des amis: $e');
-    }
-  }
-
-  // Send friend request by public ID
-  Future<void> sendFriendRequestByPublicId(String targetPublicId) async {
-    _setLoading(true);
-    _clearError();
-
-    try {
-      final newFriend = await _friendService.createFriendRequestByPublicId(targetPublicId);
-      if (newFriend != null) {
-        _outgoingRequests.add(newFriend);
-      }
       _setLoading(false);
       notifyListeners();
-    } catch (e) {
-      _setError('Échec de l\'envoi de la demande d\'ami: $e');
     }
   }
 
@@ -151,24 +176,19 @@ class FriendProvider with ChangeNotifier {
       if (updatedFriend != null) {
         print('Provider: Friend request accepted successfully');
 
-        // Remove from incoming requests
-        print('Provider: Removing request from incoming list');
-        _incomingRequests.removeWhere((friend) => friend.id == friendId);
-
-        // Add to confirmed friends
-        print('Provider: Adding to confirmed friends list');
-        _confirmedFriends.add(updatedFriend);
-
-        print('Provider: Notifying listeners of changes');
-        _setLoading(false);
-        notifyListeners();
+        // Reload all friend data to ensure consistency
+        await loadAllFriendData();
       } else {
         print('Provider: Friend request not found or could not be accepted');
         _setError('Demande d\'ami introuvable ou ne peut pas être acceptée');
+        _setLoading(false);
+        notifyListeners();
       }
     } catch (e) {
       print('Provider: Error accepting friend request: $e');
       _setError('Échec de l\'acceptation de la demande d\'ami: $e');
+      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -184,20 +204,19 @@ class FriendProvider with ChangeNotifier {
       if (updatedFriend != null) {
         print('Provider: Friend request declined successfully');
 
-        // Remove from incoming requests
-        print('Provider: Removing request from incoming list');
-        _incomingRequests.removeWhere((friend) => friend.id == friendId);
-
-        print('Provider: Notifying listeners of changes');
-        _setLoading(false);
-        notifyListeners();
+        // Reload all friend data to ensure consistency
+        await loadAllFriendData();
       } else {
         print('Provider: Friend request not found or could not be declined');
         _setError('Demande d\'ami introuvable ou ne peut pas être refusée');
+        _setLoading(false);
+        notifyListeners();
       }
     } catch (e) {
       print('Provider: Error declining friend request: $e');
       _setError('Échec du refus de la demande d\'ami: $e');
+      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -209,13 +228,12 @@ class FriendProvider with ChangeNotifier {
     try {
       await _friendService.deleteFriend(friendId);
 
-      // Remove from outgoing requests
-      _outgoingRequests.removeWhere((friend) => friend.id == friendId);
-
-      _setLoading(false);
-      notifyListeners();
+      // Reload all friend data to ensure consistency
+      await loadAllFriendData();
     } catch (e) {
       _setError('Failed to cancel friend request: $e');
+      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -227,13 +245,34 @@ class FriendProvider with ChangeNotifier {
     try {
       await _friendService.deleteFriend(friendId);
 
-      // Remove from confirmed friends
-      _confirmedFriends.removeWhere((friend) => friend.id == friendId);
-
-      _setLoading(false);
-      notifyListeners();
+      // Reload all friend data to ensure consistency
+      await loadAllFriendData();
     } catch (e) {
       _setError('Failed to remove friend: $e');
+      _setLoading(false);
+      notifyListeners();
+    }
+  }
+
+  // Send friend request by public ID
+  Future<void> sendFriendRequestByPublicId(String targetPublicId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final newFriend = await _friendService.createFriendRequestByPublicId(targetPublicId);
+      if (newFriend != null) {
+        // Reload all friend data to ensure consistency
+        await loadAllFriendData();
+      } else {
+        _setLoading(false);
+        _setError('Erreur lors de l\'envoi de la demande d\'ami');
+        notifyListeners();
+      }
+    } catch (e) {
+      _setError('Échec de l\'envoi de la demande d\'ami: $e');
+      _setLoading(false);
+      notifyListeners();
     }
   }
 
@@ -248,6 +287,7 @@ class FriendProvider with ChangeNotifier {
       return results;
     } catch (e) {
       _setError('Failed to search users: $e');
+      _setLoading(false);
       return [];
     }
   }

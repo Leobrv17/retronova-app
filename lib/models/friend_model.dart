@@ -29,6 +29,7 @@ class Friend {
 
   // Convert from JSON object
   factory Friend.fromJson(Map<String, dynamic> json) {
+    print("Parsing friend JSON: $json"); // Log pour debug
     return Friend(
       id: json['id'],
       friendFromId: json['friend_from_id'],

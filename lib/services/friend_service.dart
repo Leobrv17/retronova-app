@@ -38,28 +38,41 @@ class FriendService {
   }
 
   // Get all friends
+  // lib/services/friend_service.dart
+
   Future<List<Friend>> getAllFriends() async {
     try {
       final headers = await _getHeaders();
       print('Fetching all friends from API');
-      final response = await _client.get(
-        Uri.parse('$baseUrl/friends'),
-        headers: headers,
-      );
+
+      // Ajout d'un log de l'URL complète pour vérification
+      final url = '$baseUrl/friends';
+      print('API URL: $url');
+
+      final response = await _client.get(Uri.parse(url), headers: headers);
 
       print('Friends API response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        print('Friends API response body length: ${response.body.length}');
+        print('Friends API response body: ${response.body}');
         final List<dynamic> data = json.decode(response.body);
         final friends = data.map((json) => Friend.fromJson(json)).toList();
+
+        // Afficher les détails de chaque ami pour le débogage
+        for (var friend in friends) {
+          print(
+            'Friend ID: ${friend.id}, From: ${friend.friendFromId}, To: ${friend.friendToId}, Accept: ${friend.accept}',
+          );
+        }
 
         // Enrichir les données des amis avec les noms d'utilisateur
         await _enrichFriendsWithUserDetails(friends);
 
         return friends;
       } else {
-        print('Failed to load friends: ${response.statusCode}, ${response.body}');
+        print(
+          'Failed to load friends: ${response.statusCode}, ${response.body}',
+        );
         return [];
       }
     } catch (e) {
@@ -99,7 +112,8 @@ class FriendService {
             final fromUser = usersById[friend.friendFromId]!;
             friends[i] = friend.copyWith(
               friendFromPublicId: fromUser.publiqueId,
-              friendFromName: '${fromUser.firstName} ${fromUser.lastName}'.trim(),
+              friendFromName:
+                  '${fromUser.firstName} ${fromUser.lastName}'.trim(),
             );
           }
 
@@ -140,7 +154,9 @@ class FriendService {
           print('No users found with Firebase ID: $firebaseId');
         }
       } else {
-        print('Failed to find user by Firebase ID: ${response.statusCode}, ${response.body}');
+        print(
+          'Failed to find user by Firebase ID: ${response.statusCode}, ${response.body}',
+        );
       }
       return null;
     } catch (e) {
@@ -221,7 +237,9 @@ class FriendService {
         // Enrichir avec les données utilisateur
         friend = friend.copyWith(
           friendFromPublicId: currentSystemUser.publiqueId,
-          friendFromName: '${currentSystemUser.firstName} ${currentSystemUser.lastName}'.trim(),
+          friendFromName:
+              '${currentSystemUser.firstName} ${currentSystemUser.lastName}'
+                  .trim(),
           friendToPublicId: targetUser.publiqueId,
           friendToName: '${targetUser.firstName} ${targetUser.lastName}'.trim(),
         );
@@ -231,7 +249,9 @@ class FriendService {
         final errorMessage = json.decode(response.body)['detail'];
         throw Exception(errorMessage);
       } else {
-        throw Exception('Failed to create friend request: ${response.statusCode}');
+        throw Exception(
+          'Failed to create friend request: ${response.statusCode}',
+        );
       }
     } catch (e) {
       print('Error creating friend request: $e');
@@ -248,10 +268,7 @@ class FriendService {
       // Ajouter des logs pour suivre l'exécution
       print('Sending PUT request to: $baseUrl/friends/$friendId');
 
-      final requestBody = {
-        'accept': true,
-        'decline': false,
-      };
+      final requestBody = {'accept': true, 'decline': false};
 
       print('Request body: $requestBody');
 
@@ -276,8 +293,12 @@ class FriendService {
         print('Friend not found with ID: $friendId');
         return null;
       } else {
-        print('Failed to accept friend request: ${response.statusCode}, ${response.body}');
-        throw Exception('Failed to accept friend request: ${response.statusCode}');
+        print(
+          'Failed to accept friend request: ${response.statusCode}, ${response.body}',
+        );
+        throw Exception(
+          'Failed to accept friend request: ${response.statusCode}',
+        );
       }
     } catch (e) {
       print('Error accepting friend request: $e');
@@ -291,15 +312,7 @@ class FriendService {
       print('Declining friend request ID: $friendId');
       final headers = await _getHeaders();
 
-      // Ajouter des logs pour suivre l'exécution
-      print('Sending PUT request to: $baseUrl/friends/$friendId');
-
-      final requestBody = {
-        'accept': false,
-        'decline': true,
-      };
-
-      print('Request body: $requestBody');
+      final requestBody = {'accept': false, 'decline': true};
 
       final response = await _client.put(
         Uri.parse('$baseUrl/friends/$friendId'),
@@ -311,42 +324,15 @@ class FriendService {
       print('Decline friend response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        Friend friend = Friend.fromJson(json.decode(response.body));
-
-        // Enrichir avec les informations utilisateur
-        final List<Friend> friends = [friend];
-        await _enrichFriendsWithUserDetails(friends);
-
-        return friends.first;
-      } else if (response.statusCode == 404) {
-        print('Friend not found with ID: $friendId');
-        return null;
+        return Friend.fromJson(json.decode(response.body));
       } else {
-        print('Failed to decline friend request: ${response.statusCode}, ${response.body}');
-        throw Exception('Failed to decline friend request: ${response.statusCode}');
+        print(
+          'Failed to decline friend request: ${response.statusCode}, ${response.body}',
+        );
+        return null;
       }
     } catch (e) {
       print('Error declining friend request: $e');
-      rethrow;
-    }
-  }
-
-  // Delete friend (mark as deleted)
-  Future<Friend?> deleteFriend(String friendId) async {
-    try {
-      final headers = await _getHeaders();
-      final response = await _client.delete(
-        Uri.parse('$baseUrl/friends/$friendId'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        return Friend.fromJson(json.decode(response.body));
-      } else {
-        throw Exception('Failed to delete friend: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error deleting friend: $e');
       return null;
     }
   }
@@ -354,35 +340,46 @@ class FriendService {
   // Get pending requests from current user (où l'utilisateur actuel est l'expéditeur)
   Future<List<Friend>> getOutgoingRequests(String currentUserId) async {
     final allFriends = await getAllFriends();
-    return allFriends.where((friend) =>
-    friend.friendFromId == currentUserId &&
-        !friend.accept &&
-        !friend.decline &&
-        !friend.delete
-    ).toList();
+    return allFriends
+        .where(
+          (friend) =>
+              friend.friendFromId == currentUserId &&
+              !friend.accept &&
+              !friend.decline &&
+              !friend.delete,
+        )
+        .toList();
   }
 
   // Get pending requests to current user (où l'utilisateur actuel est le destinataire)
   Future<List<Friend>> getIncomingRequests(String currentUserId) async {
     final allFriends = await getAllFriends();
-    return allFriends.where((friend) =>
-    friend.friendToId == currentUserId &&
-        !friend.accept &&
-        !friend.decline &&
-        !friend.delete
-    ).toList();
+    return allFriends
+        .where(
+          (friend) =>
+              friend.friendToId == currentUserId &&
+              !friend.accept &&
+              !friend.decline &&
+              !friend.delete,
+        )
+        .toList();
   }
 
   // Get confirmed friends
   Future<List<Friend>> getConfirmedFriends(String currentUserId) async {
     final allFriends = await getAllFriends();
-    return allFriends.where((friend) =>
-    (friend.friendFromId == currentUserId || friend.friendToId == currentUserId) &&
-        friend.accept &&
-        !friend.decline &&
-        !friend.delete
-    ).toList();
+    return allFriends
+        .where(
+          (friend) =>
+              (friend.friendFromId == currentUserId ||
+                  friend.friendToId == currentUserId) &&
+              friend.accept &&
+              !friend.decline &&
+              !friend.delete,
+        )
+        .toList();
   }
+
   Future<List<UserModel>> searchUsers(String query) async {
     try {
       print('Searching users with query: $query');
@@ -395,7 +392,8 @@ class FriendService {
       if (response.statusCode == 200) {
         print('Search users response received');
         final List<dynamic> data = json.decode(response.body);
-        final List<UserModel> allUsers = data.map((json) => UserModel.fromApi(json)).toList();
+        final List<UserModel> allUsers =
+            data.map((json) => UserModel.fromApi(json)).toList();
 
         // Filter users locally based on the query
         if (query.isEmpty) {
@@ -417,12 +415,36 @@ class FriendService {
           }).toList();
         }
       } else {
-        print('Failed to search users: ${response.statusCode}, ${response.body}');
+        print(
+          'Failed to search users: ${response.statusCode}, ${response.body}',
+        );
         throw Exception('Failed to search users: ${response.statusCode}');
       }
     } catch (e) {
       print('Error searching users: $e');
       rethrow;
+    }
+  }
+
+  Future<Friend?> deleteFriend(String friendId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await _client.delete(
+        Uri.parse('$baseUrl/friends/$friendId'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return Friend.fromJson(json.decode(response.body));
+      } else {
+        print(
+          'Failed to delete friend: ${response.statusCode}, ${response.body}',
+        );
+        return null;
+      }
+    } catch (e) {
+      print('Error deleting friend: $e');
+      return null;
     }
   }
 }

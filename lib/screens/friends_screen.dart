@@ -1,4 +1,4 @@
-// lib/screens/friends_screen.dart - Version complète et cohérente
+// lib/screens/friends_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/friend_provider.dart';
@@ -193,6 +193,8 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
     final outgoingRequests = friendProvider.outgoingRequests;
     final currentSystemId = friendProvider.currentUserSystemId;
 
+    print("Building requests tab - incoming: ${incomingRequests.length}, outgoing: ${outgoingRequests.length}");
+
     if (incomingRequests.isEmpty && outgoingRequests.isEmpty) {
       return Center(
         child: Column(
@@ -213,6 +215,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
       onRefresh: () => friendProvider.loadAllFriendData(),
       child: ListView(
         children: [
+          // SECTION DES DEMANDES REÇUES
           if (incomingRequests.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -221,13 +224,17 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            ...incomingRequests.map((request) => _buildIncomingRequestItem(
-              request,
-              friendProvider,
-              currentSystemId ?? '',
-            )),
+            ...incomingRequests.map((friend) {
+              print("Rendering incoming request: ${friend.id}");
+              return _buildIncomingRequestItem(
+                friend,
+                friendProvider,
+                currentSystemId ?? '',
+              );
+            }).toList(),
           ],
 
+          // SECTION DES DEMANDES ENVOYÉES
           if (outgoingRequests.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -236,11 +243,14 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            ...outgoingRequests.map((request) => _buildOutgoingRequestItem(
-              request,
-              friendProvider,
-              currentSystemId ?? '',
-            )),
+            ...outgoingRequests.map((friend) {
+              print("Rendering outgoing request: ${friend.id}");
+              return _buildOutgoingRequestItem(
+                friend,
+                friendProvider,
+                currentSystemId ?? '',
+              );
+            }).toList(),
           ],
         ],
       ),
@@ -249,7 +259,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
   Widget _buildIncomingRequestItem(Friend request, FriendProvider friendProvider, String currentSystemId) {
     // Obtenir le nom d'affichage ou l'ID public du demandeur
-    final senderName = request.friendFromName ?? request.friendFromPublicId ?? "Utilisateur";
+    final senderName = request.friendFromName ?? request.friendFromPublicId ?? "Utilisateur ${request.friendFromId.substring(0, 8)}";
 
     // Obtenir la première lettre pour l'avatar
     final initial = senderName.isNotEmpty ? senderName[0].toUpperCase() : 'A';
@@ -271,8 +281,11 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
               icon: const Icon(Icons.check, color: Colors.green),
               onPressed: () {
                 print('Accepting friend request ID: ${request.id}');
-                // Implémentation originale
                 friendProvider.acceptFriendRequest(request.id);
+                // Afficher une confirmation
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Demande d\'ami de $senderName acceptée')),
+                );
               },
               tooltip: 'Accepter',
             ),
@@ -281,8 +294,11 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
               icon: const Icon(Icons.close, color: Colors.red),
               onPressed: () {
                 print('Declining friend request ID: ${request.id}');
-                // Implémentation originale
                 friendProvider.declineFriendRequest(request.id);
+                // Afficher une confirmation
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Demande d\'ami de $senderName refusée')),
+                );
               },
               tooltip: 'Refuser',
             ),
@@ -294,7 +310,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
   Widget _buildOutgoingRequestItem(Friend request, FriendProvider friendProvider, String currentSystemId) {
     // Obtenir le nom d'affichage ou l'ID public du destinataire
-    final recipientName = request.friendToName ?? request.friendToPublicId ?? "Utilisateur";
+    final recipientName = request.friendToName ?? request.friendToPublicId ?? "Utilisateur ${request.friendToId.substring(0, 8)}";
 
     // Obtenir la première lettre pour l'avatar
     final initial = recipientName.isNotEmpty ? recipientName[0].toUpperCase() : 'A';
@@ -410,11 +426,11 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                     title: Text(displayName),
                     subtitle: Text('ID: ${user.publiqueId ?? "Non défini"}'),
                     trailing: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: () {
                         try {
                           // Envoyer une demande d'ami en utilisant l'ID public
                           if (user.publiqueId != null) {
-                            await friendProvider.sendFriendRequestByPublicId(user.publiqueId!);
+                            friendProvider.sendFriendRequestByPublicId(user.publiqueId!);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Demande d\'ami envoyée à $displayName')),
                             );
