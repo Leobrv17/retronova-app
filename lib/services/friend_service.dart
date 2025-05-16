@@ -139,17 +139,18 @@ class FriendService {
       final headers = await _getHeaders();
       // Corriger l'URL pour utiliser le paramètre de requête au lieu d'un chemin spécifique
       final response = await _client.get(
-        Uri.parse('$baseUrl/users?firebase_id=$firebaseId'),
+        Uri.parse('$baseUrl/users/firebase/$firebaseId'),
         headers: headers,
       );
 
       print('Find user response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = json.decode(response.body);
+        print("hello, ${data}");
         if (data.isNotEmpty) {
           print('User found');
-          return UserModel.fromApi(data[0]);
+          return UserModel.fromApi(data);
         } else {
           print('No users found with Firebase ID: $firebaseId');
         }
