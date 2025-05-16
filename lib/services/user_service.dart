@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class ApiService {
-  static const String _baseUrl = 'http://10.31.38.184:8000';
+  static const String _baseUrl = 'http://192.168.98.215:8000';
 
   Map<String, String> get headers => {
     'Content-Type': 'application/json',
