@@ -7,7 +7,7 @@ import '../models/user_model.dart';
 
 class FriendService {
   // Base API URL
-  final String baseUrl = 'http://192.168.189.215:8000';
+  final String baseUrl = 'http://10.31.38.184:8000';
   final http.Client _client = http.Client();
 
   // Helper to get authentication token
